@@ -1,0 +1,11 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.so binary
+*.jar binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.svg text
+gradlew text eol=lf

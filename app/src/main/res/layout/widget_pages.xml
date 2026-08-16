@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_shell"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <ViewFlipper
+        android:id="@+id/widget_flipper"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:autoStart="false"
+        android:measureAllChildren="true">
+
+        <!-- Page 0: batteries only -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/widget_panel"
+            android:gravity="center_vertical"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:letterSpacing="0.08"
+                android:text="MARSHALL"
+                android:textColor="#AEB0BD"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="20dp"
+                    android:layout_height="wrap_content"
+                    android:text="L"
+                    android:textColor="#F3F3F7"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <ProgressBar
+                    android:id="@+id/widget_left_bar"
+                    style="@android:style/Widget.ProgressBar.Horizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="8dp"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progressBackgroundTint="#555765"
+                    android:progressTint="#F3F3F7" />
+                <TextView
+                    android:id="@+id/widget_left_value"
+                    android:layout_width="36dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="—"
+                    android:textColor="#F3F3F7"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="20dp"
+                    android:layout_height="wrap_content"
+                    android:text="R"
+                    android:textColor="#F3F3F7"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <ProgressBar
+                    android:id="@+id/widget_right_bar"
+                    style="@android:style/Widget.ProgressBar.Horizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="8dp"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progressBackgroundTint="#555765"
+                    android:progressTint="#F3F3F7" />
+                <TextView
+                    android:id="@+id/widget_right_value"
+                    android:layout_width="36dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="—"
+                    android:textColor="#F3F3F7"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical">
+                <TextView
+                    android:layout_width="20dp"
+                    android:layout_height="wrap_content"
+                    android:text="C"
+                    android:textColor="#F3F3F7"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+                <ProgressBar
+                    android:id="@+id/widget_case_bar"
+                    style="@android:style/Widget.ProgressBar.Horizontal"
+                    android:layout_width="0dp"
+                    android:layout_height="8dp"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progressBackgroundTint="#555765"
+                    android:progressTint="#F3F3F7" />
+                <TextView
+                    android:id="@+id/widget_case_value"
+                    android:layout_width="36dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="—"
+                    android:textColor="#F3F3F7"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Page 1: ANC only -->
+        <LinearLayout
+            android:id="@+id/widget_anc"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/widget_panel"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="10dp">
+
+            <ImageView
+                android:id="@+id/widget_anc_icon"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
+                android:contentDescription="Toggle noise control"
+                android:src="@drawable/ic_noise_control_off"
+                android:tint="#F3F3F7" />
+
+            <TextView
+                android:id="@+id/widget_anc_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="Noise control off"
+                android:textColor="#F3F3F7"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </ViewFlipper>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingTop="6dp">
+
+        <TextView
+            android:id="@+id/widget_page_battery"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:gravity="center"
+            android:text="●"
+            android:textColor="#F3F3F7"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_page_anc"
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:gravity="center"
+            android:text="○"
+            android:textColor="#AEB0BD"
+            android:textSize="12sp" />
+    </LinearLayout>
+</LinearLayout>

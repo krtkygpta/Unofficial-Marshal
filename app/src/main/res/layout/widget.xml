@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_minimal">
+
+    <LinearLayout
+        android:id="@+id/widget_page_battery"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingStart="22dp"
+        android:paddingTop="18dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="14dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/widget_bud_left"
+                android:layout_width="0dp"
+                android:layout_height="62dp"
+                android:layout_weight="1"
+                android:adjustViewBounds="true"
+                android:contentDescription="Left earbud"
+                android:scaleType="fitCenter" />
+
+            <ImageView
+                android:id="@+id/widget_bud_right"
+                android:layout_width="0dp"
+                android:layout_height="62dp"
+                android:layout_weight="1"
+                android:adjustViewBounds="true"
+                android:contentDescription="Right earbud"
+                android:scaleType="fitCenter" />
+        </LinearLayout>
+
+        <ImageView
+            android:id="@+id/widget_led"
+            android:layout_width="match_parent"
+            android:layout_height="22dp"
+            android:layout_marginTop="10dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="Battery percentages"
+            android:scaleType="fitCenter" />
+
+        <LinearLayout
+            android:id="@+id/widget_disconnected"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Not connected"
+                android:textColor="#F4F4F4"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/widget_page_anc"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/widget_anc_hit"
+            android:layout_width="72dp"
+            android:layout_height="72dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:src="@drawable/widget_anc_well" />
+
+            <ImageView
+                android:id="@+id/widget_anc_icon"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="center"
+                android:contentDescription="Toggle noise control"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_noise_control_off" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/widget_anc_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:text="Off"
+            android:textColor="#F4F4F4"
+            android:textSize="14sp" />
+    </LinearLayout>
+</FrameLayout>

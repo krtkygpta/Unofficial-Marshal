@@ -1,0 +1,14 @@
+Marshall Control is an unofficial community project.
+
+It is not affiliated with, endorsed by, or supported by Marshall Group AB,
+Zound Industries, or Airoha Technology.
+
+Marshall, Motif, and related names are trademarks of their respective owners.
+
+Custom equaliser support for Motif II uses `libnative-peq.so`, the Airoha
+parametric-EQ native library shipped with the official Marshall Bluetooth
+Android app. That binary remains the property of its copyright holders and
+is included solely for device compatibility.
+
+Protocol notes for Zound GATT characteristics are based on public reverse
+engineering (see README).

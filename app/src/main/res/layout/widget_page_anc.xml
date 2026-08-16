@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_anc"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:minHeight="150dp"
+    android:background="@android:color/transparent"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <FrameLayout
+        android:id="@+id/widget_anc_hit"
+        android:layout_width="72dp"
+        android:layout_height="72dp">
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:src="@drawable/widget_anc_well" />
+
+        <ImageView
+            android:id="@+id/widget_anc_icon"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:contentDescription="Toggle noise control"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_noise_control_off" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/widget_anc_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="Off"
+        android:textColor="#F4F4F4"
+        android:textSize="14sp" />
+</LinearLayout>

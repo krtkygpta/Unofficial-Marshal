@@ -1,0 +1,6 @@
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_item_art"
+    android:layout_width="match_parent"
+    android:layout_height="250dp"
+    android:scaleType="fitXY"
+    android:contentDescription="Widget panel" />

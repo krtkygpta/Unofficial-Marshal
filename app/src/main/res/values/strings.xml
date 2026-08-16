@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Marshall Control</string>
+    <string name="permission_rationale">Bluetooth access lets the app find, pair with and control your Marshall earbuds.</string>
+    <string name="widget_description">Swipe between Motif battery and noise control.</string>
+</resources>

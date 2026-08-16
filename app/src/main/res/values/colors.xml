@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive icon: near-black plate, white script foreground -->
+    <color name="ic_launcher_background">#0B0B0D</color>
+    <color name="marshall_black">#0B0B0D</color>
+    <color name="marshall_gold">#D4AF5A</color>
+    <color name="pixel_bg">#F1F3F4</color>
+</resources>
+
