@@ -33,7 +33,7 @@
         <receiver
             android:name=".MarshallWidgetProvider"
             android:exported="true"
-            android:label="Marshall earbuds">
+            android:label="Unofficial Marshall">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>

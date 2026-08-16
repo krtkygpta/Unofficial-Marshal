@@ -2,6 +2,9 @@
 
 PRs and issues are welcome, especially logs from devices that are not Motif II.
 
+The public name is **Unofficial Marshall**. Do not drop the word unofficial
+from the launcher label.
+
 ## Ground rules
 
 - Do not commit `apks/`, `tools/tmp/`, keystores, or decompiled official sources.

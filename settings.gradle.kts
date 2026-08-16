@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MarshallControl"
+rootProject.name = "UnofficialMarshall"
 include(":app")

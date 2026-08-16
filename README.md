@@ -1,16 +1,33 @@
-# Marshall Control
+# Unofficial Marshall
 
-A fast, unofficial Android app for Marshall Bluetooth earbuds and headphones.
+A fast companion for Marshall Bluetooth earbuds and headphones. Not the
+official Marshall app, not affiliated with Marshall Group, Zound, or Airoha.
 
-The official Marshall Bluetooth app is slow and heavy. This is a small Compose
-replacement: connect over BLE, change ANC / EQ / touch, and (on Motif II)
-drive the real custom EQ the official app uses.
+The name uses “Marshall” only to say **what devices it talks to**. The
+launcher title is **Unofficial Marshall** on purpose so it is not passed
+off as Marshall Bluetooth.
+
+The stock app is slow. This is a small Compose stand-in: BLE connect, ANC /
+EQ / touch, and (on Motif II) the same custom-EQ path the official app uses.
 
 **Tested:** Marshall Motif II A.N.C.  
-**Likely works:** other Zound / Marshall devices that speak the same BLE
-profile (see [Supported devices](#supported-devices)).
+**Likely works:** other Zound / Marshall devices on the same BLE profile
+(see [Supported devices](#supported-devices)).
 
-This project is **not** affiliated with Marshall Group, Zound, or Airoha.
+## Package name / official app
+
+This build uses the **same Android package name** as official Marshall
+Bluetooth:
+
+`com.zoundindustries.marshallbt`
+
+Some Motif / Airoha behaviour (SPP RACE, pairing identity, firmware checks)
+keys off that id. Using it lets this APK spoof those checks.
+
+**You cannot install this next to the official app.** Android allows one
+app per package. Uninstall Marshall Bluetooth first, then sideload. Putting
+the official app back later replaces this one (or the install is refused if
+the signing keys differ).
 
 ## Features
 
@@ -41,11 +58,8 @@ Output:
 
 `app/build/outputs/apk/release/app-release.apk`
 
-Sideload it. The package id is `com.marshall.motif`, so it sits next to the
-official Marshall app instead of replacing it.
-
-Uninstall any older debug build that used `com.zoundindustries.marshallbt` if
-you still have one.
+Sideload it **after** uninstalling official Marshall Bluetooth (same package
+id — they cannot coexist). The home-screen name is **Unofficial Marshall**.
 
 ## Build from source
 
