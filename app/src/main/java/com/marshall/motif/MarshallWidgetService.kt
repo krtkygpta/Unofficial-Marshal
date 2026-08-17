@@ -8,6 +8,7 @@ import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
+import androidx.core.content.ContextCompat
 import com.marshall.motif.ble.Protocol
 import com.marshall.motif.ui.components.ancModeDrawable
 
@@ -56,13 +57,26 @@ class MarshallWidgetService : RemoteViewsService() {
                 views.setViewVisibility(R.id.widget_disconnected, View.GONE)
                 views.setImageViewBitmap(
                     R.id.widget_led,
-                    WidgetLed.drawPercents(left, right, case, context.resources.displayMetrics.density),
+                    WidgetLed.drawPercents(
+                        left,
+                        right,
+                        case,
+                        context.resources.displayMetrics.density,
+                        ContextCompat.getColor(context, R.color.widget_on_surface),
+                    ),
                 )
             } else {
                 views.setViewVisibility(R.id.widget_led, View.GONE)
                 views.setViewVisibility(R.id.widget_disconnected, View.VISIBLE)
             }
             applyPageHeight(views, R.id.widget_page_battery)
+            views.setOnClickFillInIntent(
+                R.id.widget_page_battery,
+                Intent().putExtra(
+                    MarshallWidgetProvider.EXTRA_WIDGET_ACTION,
+                    MarshallWidgetProvider.ACTION_OPEN_APP,
+                ),
+            )
             return views
         }
 
@@ -75,9 +89,16 @@ class MarshallWidgetService : RemoteViewsService() {
                 views.setTextViewText(R.id.widget_anc_label, "Not connected")
                 views.setImageViewResource(R.id.widget_anc_icon, R.drawable.ic_noise_control_off)
             }
-            views.setInt(R.id.widget_anc_icon, "setColorFilter", 0xFFF4F4F4.toInt())
+            views.setInt(
+                R.id.widget_anc_icon,
+                "setColorFilter",
+                ContextCompat.getColor(context, R.color.widget_on_surface),
+            )
             applyPageHeight(views, R.id.widget_anc)
-            val click = Intent().setAction(MarshallWidgetProvider.ACTION_TOGGLE_ANC)
+            val click = Intent().putExtra(
+                MarshallWidgetProvider.EXTRA_WIDGET_ACTION,
+                MarshallWidgetProvider.ACTION_TOGGLE_ANC,
+            )
             views.setOnClickFillInIntent(R.id.widget_anc_hit, click)
             views.setOnClickFillInIntent(R.id.widget_anc_icon, click)
             return views

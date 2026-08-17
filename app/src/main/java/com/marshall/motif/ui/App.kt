@@ -32,6 +32,7 @@ import com.marshall.motif.WidgetStateStore
 import com.marshall.motif.ble.BleManager
 import com.marshall.motif.ui.screens.ControlsScreen
 import com.marshall.motif.ui.screens.DevicesScreen
+import com.marshall.motif.ui.screens.FindScreen
 import com.marshall.motif.ui.screens.HomeScreen
 import com.marshall.motif.ui.screens.SettingsScreen
 import com.marshall.motif.ui.screens.SoundScreen
@@ -44,6 +45,7 @@ private enum class AppRoute {
     Sound,
     Controls,
     Wear,
+    Find,
     Settings,
 }
 
@@ -66,6 +68,7 @@ fun MarshallApp(ble: BleManager, settings: SettingsStore) {
                 AppRoute.Sound,
                 AppRoute.Controls,
                 AppRoute.Wear,
+                AppRoute.Find,
                 AppRoute.Settings,
                     -> AppRoute.Home
             }
@@ -163,6 +166,7 @@ fun MarshallApp(ble: BleManager, settings: SettingsStore) {
                             onOpenSound = { route = AppRoute.Sound },
                             onOpenControls = { route = AppRoute.Controls },
                             onOpenWear = { route = AppRoute.Wear },
+                            onOpenFind = { route = AppRoute.Find },
                             onOpenSettings = { route = AppRoute.Settings },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -180,6 +184,12 @@ fun MarshallApp(ble: BleManager, settings: SettingsStore) {
                         )
 
                         AppRoute.Wear -> WearScreen(
+                            ble = ble,
+                            onBack = { route = AppRoute.Home },
+                            modifier = Modifier.fillMaxSize(),
+                        )
+
+                        AppRoute.Find -> FindScreen(
                             ble = ble,
                             onBack = { route = AppRoute.Home },
                             modifier = Modifier.fillMaxSize(),

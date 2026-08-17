@@ -27,10 +27,15 @@ object MarshallGatt {
     /** Standard Battery service + characteristic. */
     val BATTERY_SERVICE: UUID = UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb")
     val BATTERY_LEVEL: UUID = UUID.fromString("00002a19-0000-1000-8000-00805f9b34fb")
+    val BATTERY_LEVEL_STATUS: UUID = UUID.fromString("00002bed-0000-1000-8000-00805f9b34fb")
 
-    /** Tymphany SDK earbud battery levels (Motif II ANC). */
-    val RIGHT_BATTERY: UUID = UUID.fromString("7a573e5d-9330-4d9b-8660-63c33fc50001")
-    val LEFT_BATTERY: UUID = UUID.fromString("7a573e5d-9330-4d9b-8660-63c33fc50002")
+    /**
+     * Tymphany earbud batteries (Motif II). Official headers name 50001
+     * “right” and 50002 “left”, but on Motif those are swapped vs the
+     * physical buds / Android Device details.
+     */
+    val LEFT_BATTERY: UUID = UUID.fromString("7a573e5d-9330-4d9b-8660-63c33fc50001")
+    val RIGHT_BATTERY: UUID = UUID.fromString("7a573e5d-9330-4d9b-8660-63c33fc50002")
     val CASE_BATTERY: UUID = UUID.fromString("7a573e5d-9330-4d9b-8660-63c33fc50003")
 
     // ---- Device Information (Bluetooth standard) ----
@@ -79,6 +84,11 @@ object MarshallGatt {
     val AIROHA_RX: UUID = UUID.fromString("43484152-2dab-3141-6972-6f6861424c45")
     val AIROHA_META: UUID = UUID.fromString("43484152-2dab-3041-6972-6f6861424c45")
 
+    /** Official LE_AUDIO_CONFIG — enable bit for LE Audio / LC3. */
+    val BT_CONNECTION_CONTROL: UUID = UUID.fromString("00000034-1337-1dea-feed-c0ffee70c0de")
+    val LE_AUDIO_CONFIG: UUID = UUID.fromString("0000003d-1337-1dea-feed-c0ffee70c0de")
+    val LE_AUDIO_CONFIG_SIG: UUID = UUID.fromString("0000003d-0000-1000-8000-00805f9b34fb")
+
     /** Every characteristic we know how to talk to. */
     val KNOWN: Set<UUID> = setOf(
         RENAME, VOLUME, AUDIO_CONTROL, NOW_PLAYING, UI_SOUNDS, UI_SOUNDS_LEGACY,
@@ -88,6 +98,8 @@ object MarshallGatt {
         TRANSPARENCY_VALUE, ANC_VALUE, ECO_CHARGING, WEAR_SENSOR_STATUS,
         WEAR_SENSOR_ACTION, SOUNDSTAGE, TONE_CONTROL, TONE_CONTROL_LEGACY, TONE_CONTROL_SIG,
         AIROHA_TX, AIROHA_RX, AIROHA_META,
+        LE_AUDIO_CONFIG, LE_AUDIO_CONFIG_SIG,
+        BT_CONNECTION_CONTROL,
     )
 
     /** 16-bit code from any 128-bit UUID variant (modern, legacy, SIG base). */
@@ -121,6 +133,8 @@ object MarshallGatt {
             0x0027 -> WEAR_SENSOR_STATUS
             0x0028 -> WEAR_SENSOR_ACTION
             0x0033 -> SOUNDSTAGE
+            0x0034 -> BT_CONNECTION_CONTROL
+            0x003D -> LE_AUDIO_CONFIG
             else -> null
         }
     }
@@ -133,6 +147,7 @@ object MarshallGatt {
         EQ_SETTINGS_LEGACY -> EQ_SETTINGS
         EQ_CUSTOM_LEGACY, EQ_CUSTOM_SIG -> EQ_CUSTOM
         TONE_CONTROL_LEGACY, TONE_CONTROL_SIG -> TONE_CONTROL
+        LE_AUDIO_CONFIG_SIG -> LE_AUDIO_CONFIG
         else -> uuid
     }
 
@@ -148,6 +163,11 @@ object MarshallGatt {
         GRAPHICAL_EQ,
         GRAPHICAL_EQ_LEGACY,
         UUID.fromString("0000000f-0000-1000-8000-00805f9b34fb"),
+    )
+
+    fun leAudioConfigAliases(): List<UUID> = listOf(
+        LE_AUDIO_CONFIG,
+        LE_AUDIO_CONFIG_SIG,
     )
 
     fun toneControlAliases(): List<UUID> = listOf(
@@ -186,6 +206,8 @@ fun friendlyName(uuid: UUID): String = when (uuid) {
     MarshallGatt.AIROHA_TX -> "Airoha RACE TX"
     MarshallGatt.AIROHA_RX -> "Airoha RACE RX"
     MarshallGatt.AIROHA_META -> "Airoha RACE meta"
+    MarshallGatt.LE_AUDIO_CONFIG, MarshallGatt.LE_AUDIO_CONFIG_SIG -> "LE Audio config"
+    MarshallGatt.BT_CONNECTION_CONTROL -> "Multipoint"
     MarshallGatt.RIGHT_BATTERY -> "Battery R"
     MarshallGatt.LEFT_BATTERY -> "Battery L"
     MarshallGatt.CASE_BATTERY -> "Battery case"

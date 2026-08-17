@@ -10,6 +10,8 @@ off as Marshall Bluetooth.
 The stock app is slow. This is a small Compose stand-in: BLE connect, ANC /
 EQ / touch, and (on Motif II) the same custom-EQ path the official app uses.
 
+Current release: **1.1.8**.
+
 **Tested:** Marshall Motif II A.N.C.  
 **Likely works:** other Zound / Marshall devices on the same BLE profile
 (see [Supported devices](#supported-devices)).
@@ -31,14 +33,25 @@ the signing keys differ).
 
 ## Features
 
-- Scan and pair Motif-class devices (`MOTIF II A.N.C. [LE]`)
-- Battery for left, right, and case
+- Scan and connect Motif-class devices (`MOTIF II A.N.C. [LE]`)
+- **My Marshall switcher** — saved products plus phone-paired Marshall /
+  Motif `[LE]` / Major / Monitor; tap a row to switch
+- Left / case / right batteries (Motif mapping matches Android Device details)
 - ANC / Transparency / Off plus 4-level strength
-- EQ presets (Marshall, Custom, Bass boost, Mid boost, Treble, Mid reduction)
-- **Custom 5-band EQ** on Motif II (official Airoha SPP + `libnative-peq`)
+- Sound: **Simple** factory presets, **Advanced** custom curve
+- Factory EQ: Marshall, Bass boost, Mid boost, Treble, Mid reduction
+  (GATT `0017` on profile 2)
+- **Custom 5-band EQ** on Motif II — drag the same filled response graph
+  as Simple (160 / 400 / 1k / 2.5k / 6.25 kHz, ±6 dB) over official
+  Airoha SPP + `libnative-peq`
+- Named local EQ snapshots and restore last curve on connect
+- **Find buds** page — illustrations, ring left or right, stop
+- Multipoint host list when the buds expose `0034`
 - Touch map, wear detect, UI sounds
-- Home-screen 2×2 widget (battery + ANC pages)
-- Light / dark / system theme
+- LE Audio experiment if firmware advertises `003d` (Motif II does not)
+- Home-screen 2×2 widget: battery page + ANC page, light / dark, tap
+  battery to open the app
+- Themes: Material You, true black/white **Mono**, or a custom accent
 
 ## Requirements
 
@@ -77,9 +90,12 @@ not for Play).
 
 ## Custom EQ (Motif II)
 
+**Simple** lists the factory presets and shows a read-only response
+plot. **Advanced** is the same plot with draggable band nodes.
+
 Presets go over BLE GATT (`EQUALIZER_SETTINGS` / `0017`) on **profile 2**.
 
-Slider bands go over **Bluetooth Classic SPP** to the Airoha RACE UUID
+Band gains go over **Bluetooth Classic SPP** to the Airoha RACE UUID
 `00000000-0000-0000-0099-AABBCCDDEEFF` — the same path as the official app.
 
 | Band     | Frequency |

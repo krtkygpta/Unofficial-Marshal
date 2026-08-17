@@ -11,6 +11,8 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothManager
+import com.marshall.motif.EqLibrary
+import com.marshall.motif.EqSnapshot
 import com.marshall.motif.WidgetStateStore
 import android.bluetooth.BluetoothProfile
 import android.bluetooth.le.ScanCallback
@@ -33,6 +35,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.UUID
 
 /** A device found during BLE scanning. */
@@ -61,6 +65,7 @@ class BleManager private constructor(private val context: Context) {
         private const val REQUEST_CODE_PERMISSIONS = 71
         private const val MAX_RECONNECT_ATTEMPTS = 10
         private const val PREF_EQ_PATH = "custom_eq_path"
+        private const val PREF_KNOWN_DEVICES = "known_devices"
 
         /** Notify only what the UI needs. Now-playing / volume / RACE flood the radio. */
         private val NOTIFY_CHARS = setOf(
@@ -69,6 +74,8 @@ class BleManager private constructor(private val context: Context) {
             MarshallGatt.TRANSPARENCY_VALUE,
             MarshallGatt.EQ_SETTINGS,
             MarshallGatt.EQ_CUSTOM,
+            MarshallGatt.LE_AUDIO_CONFIG,
+            MarshallGatt.BT_CONNECTION_CONTROL,
             MarshallGatt.GRAPHICAL_EQ,
             MarshallGatt.LEFT_BATTERY,
             MarshallGatt.RIGHT_BATTERY,
@@ -126,9 +133,14 @@ class BleManager private constructor(private val context: Context) {
     private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
     private val adapter: BluetoothAdapter? get() = bluetoothManager?.adapter
 
+    var knownDevices by mutableStateOf(loadKnownDevices())
+        private set
+
     private val chars = HashMap<UUID, BluetoothGattCharacteristic>()
     private val standardBatteryChars = ArrayList<BluetoothGattCharacteristic>()
+    private val batteryStatusChars = ArrayList<BluetoothGattCharacteristic>()
     private val extraWritables = ArrayList<BluetoothGattCharacteristic>()
+    private var batteriesFromIdentifier = false
 
     private var gatt: BluetoothGatt? = null
     private var gattOp: CompletableDeferred<Int>? = null
@@ -142,6 +154,9 @@ class BleManager private constructor(private val context: Context) {
     private var servicesRequested = false
     private var attMtu: Int = 23
     private val raceSpp = RaceSpp { logLine(it) }
+    private val eqLibrary = EqLibrary(context)
+    private var multipointPending = 0
+    private val multipointScratch = ArrayList<BtHost>()
 
     init {
         scope.launch {
@@ -266,17 +281,81 @@ class BleManager private constructor(private val context: Context) {
     // ------------------------------------------------------------------
 
     fun hasSavedDevice(): Boolean =
-        preferences.getString("device_address", "").isNullOrEmpty().not()
+        preferences.getString("device_address", "").isNullOrEmpty().not() ||
+            knownDevices.isNotEmpty()
 
     fun savedDeviceName(): String = preferences.getString("device_name", "") ?: ""
 
     fun restoreSavedDevice() {
+        refreshBondedDevices()
         val address = preferences.getString("device_address", "") ?: return
         if (address.isEmpty()) return
         connect(address, userInitiated = false)
     }
 
     fun connect(address: String) = connect(address, userInitiated = true)
+
+    fun switchTo(address: String) {
+        if (address.isBlank()) return
+        if (state.connected && state.deviceAddress.equals(address, ignoreCase = true)) return
+        val label = knownDevices.firstOrNull { it.address.equals(address, ignoreCase = true) }?.name
+            ?: address
+        postMessage("Switching to $label")
+        connect(address, userInitiated = true)
+    }
+
+    fun refreshBondedDevices() {
+        val bonded = try {
+            adapter?.bondedDevices
+        } catch (_: SecurityException) {
+            null
+        } ?: return
+        var changed = false
+        val next = knownDevices.toMutableList()
+        for (device in bonded) {
+            val raw = device.name.orEmpty()
+            if (!isGattTargetName(raw)) continue
+            val address = device.address ?: continue
+            if (next.any { it.address.equals(address, ignoreCase = true) }) continue
+            next += KnownDevice(
+                address = address,
+                name = raw.removeSuffix(" [LE]").trim().ifBlank { "Marshall" },
+                lastConnectedAt = 0L,
+            )
+            changed = true
+        }
+        if (changed) persistKnownDevices(next)
+    }
+
+    fun forgetKnownDevice(address: String) {
+        if (address.isBlank()) return
+        val wasCurrent = state.deviceAddress.equals(address, ignoreCase = true) ||
+            (preferences.getString("device_address", "") ?: "").equals(address, ignoreCase = true)
+        persistKnownDevices(knownDevices.filterNot { it.address.equals(address, ignoreCase = true) })
+        if (!wasCurrent) {
+            postMessage("Device forgotten")
+            return
+        }
+        userInitiated = true
+        reconnectJob?.cancel()
+        closeGatt()
+        val next = knownDevices.firstOrNull()
+        if (next != null) {
+            preferences.edit()
+                .putString("device_address", next.address)
+                .putString("device_name", next.name)
+                .apply()
+            state = DeviceState(deviceAddress = next.address, deviceName = next.name)
+        } else {
+            preferences.edit()
+                .remove("device_address")
+                .remove("device_name")
+                .apply()
+            state = DeviceState()
+        }
+        publishWidgetState()
+        postMessage("Device forgotten")
+    }
 
     private fun connect(address: String, userInitiated: Boolean) {
         withPermissions {
@@ -293,7 +372,16 @@ class BleManager private constructor(private val context: Context) {
             reconnectJob?.cancel()
             stopScan()
             closeGatt()
-            state = state.copy(connecting = true, connected = false, deviceAddress = address)
+            val knownName = knownDevices.firstOrNull {
+                it.address.equals(address, ignoreCase = true)
+            }?.name.orEmpty()
+            state = state.copy(
+                connecting = true,
+                connected = false,
+                deviceAddress = address,
+                deviceName = knownName.ifEmpty { state.deviceName },
+            )
+            rememberDevice(address, state.deviceName.ifBlank { knownName })
             logLine("connect -> $address")
             gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         }
@@ -309,13 +397,106 @@ class BleManager private constructor(private val context: Context) {
     }
 
     fun forgetDevice() {
+        val address = state.deviceAddress.ifEmpty {
+            preferences.getString("device_address", "") ?: ""
+        }
+        if (address.isNotEmpty()) {
+            forgetKnownDevice(address)
+            return
+        }
         userInitiated = true
         reconnectJob?.cancel()
         closeGatt()
-        preferences.edit().clear().apply()
+        preferences.edit()
+            .remove("device_address")
+            .remove("device_name")
+            .apply()
         state = DeviceState()
         publishWidgetState()
         postMessage("Device forgotten")
+    }
+
+    private fun rememberDevice(address: String, name: String) {
+        if (address.isBlank()) return
+        val label = name.removeSuffix(" [LE]").trim().ifBlank { "Marshall" }
+        val existing = knownDevices.firstOrNull { it.address.equals(address, ignoreCase = true) }
+        val entry = KnownDevice(
+            address = address,
+            name = label,
+            lastConnectedAt = System.currentTimeMillis(),
+        )
+        val next = if (existing == null) {
+            knownDevices + entry
+        } else {
+            knownDevices.map { if (it.address.equals(address, ignoreCase = true)) entry else it }
+        }
+        persistKnownDevices(next)
+        preferences.edit()
+            .putString("device_address", address)
+            .putString("device_name", label)
+            .apply()
+    }
+
+    private fun loadKnownDevices(): List<KnownDevice> {
+        val parsed = parseKnownDevices(preferences.getString(PREF_KNOWN_DEVICES, null))
+        val legacyAddress = preferences.getString("device_address", "") ?: ""
+        val legacyName = preferences.getString("device_name", "") ?: ""
+        if (legacyAddress.isEmpty() ||
+            parsed.any { it.address.equals(legacyAddress, ignoreCase = true) }
+        ) {
+            return parsed.sortedByDescending { it.lastConnectedAt }
+        }
+        return (parsed + KnownDevice(legacyAddress, legacyName.ifBlank { "Marshall" }, 0L))
+            .sortedByDescending { it.lastConnectedAt }
+    }
+
+    private fun persistKnownDevices(list: List<KnownDevice>) {
+        val ordered = list
+            .distinctBy { it.address.uppercase() }
+            .sortedByDescending { it.lastConnectedAt }
+        knownDevices = ordered
+        val arr = JSONArray()
+        ordered.forEach { device ->
+            arr.put(
+                JSONObject()
+                    .put("a", device.address)
+                    .put("n", device.name)
+                    .put("t", device.lastConnectedAt),
+            )
+        }
+        preferences.edit().putString(PREF_KNOWN_DEVICES, arr.toString()).apply()
+    }
+
+    private fun parseKnownDevices(raw: String?): List<KnownDevice> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return runCatching {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    val address = obj.optString("a").trim()
+                    if (address.isEmpty()) continue
+                    add(
+                        KnownDevice(
+                            address = address,
+                            name = obj.optString("n").ifBlank { "Marshall" },
+                            lastConnectedAt = obj.optLong("t"),
+                        ),
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun isGattTargetName(name: String): Boolean {
+        if (name.isBlank()) return false
+        val motif = name.contains("MOTIF", ignoreCase = true)
+        // Motif Classic (A2DP) shares the name without [LE] and is the wrong GATT target.
+        if (motif) return name.contains("[LE]", ignoreCase = true)
+        return name.contains("Marshall", ignoreCase = true) ||
+            name.contains("Willem", ignoreCase = true) ||
+            name.contains("Major", ignoreCase = true) ||
+            name.contains("Monitor", ignoreCase = true)
     }
 
     fun onDestroy() {
@@ -343,7 +524,9 @@ class BleManager private constructor(private val context: Context) {
         raceSpp.close()
         chars.clear()
         standardBatteryChars.clear()
+        batteryStatusChars.clear()
         extraWritables.clear()
+        batteriesFromIdentifier = false
         servicesRequested = false
     }
 
@@ -370,7 +553,18 @@ class BleManager private constructor(private val context: Context) {
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     val wasConnected = state.connected
                     closeGatt()
-                    state = state.copy(connected = false, connecting = false)
+                    state = state.copy(
+                        connected = false,
+                        connecting = false,
+                        eqPreset = -1,
+                        leAudioConfigAvailable = false,
+                        leAudioPresent = false,
+                        leAudioEnabled = false,
+                        leAudioRaw = "",
+                        multipointAvailable = false,
+                        multipointHosts = emptyList(),
+                        findRinging = null,
+                    )
                     publishWidgetState()
                     if (wasConnected) postMessage("Device disconnected")
                     scheduleReconnect()
@@ -396,15 +590,15 @@ class BleManager private constructor(private val context: Context) {
             state = state.copy(
                 connected = true,
                 connecting = false,
+                eqPreset = -1,
                 deviceName = name.ifEmpty { state.deviceName },
                 availableChars = chars.keys.toSet(),
                 gattMap = gattMap,
+                leAudioConfigAvailable = chars.containsKey(MarshallGatt.LE_AUDIO_CONFIG),
+                multipointAvailable = chars.containsKey(MarshallGatt.BT_CONNECTION_CONTROL),
             )
             reconnectAttempts = 0
-            preferences.edit()
-                .putString("device_address", gatt.device.address)
-                .putString("device_name", state.deviceName)
-                .apply()
+            rememberDevice(gatt.device.address, state.deviceName)
             postMessage("Connected to " + state.deviceName)
             gattMap.forEach { logLine(it) }
             scope.launch {
@@ -412,6 +606,8 @@ class BleManager private constructor(private val context: Context) {
                 subscribeAll()
                 resumeAirohaDsp()
                 raceSpp.ensureConnected(adapter)
+                refreshMultipoint()
+                maybeRestoreCustomEq()
             }
         }
 
@@ -488,7 +684,9 @@ class BleManager private constructor(private val context: Context) {
     private fun populateCharacteristics(gatt: BluetoothGatt) {
         chars.clear()
         standardBatteryChars.clear()
+        batteryStatusChars.clear()
         extraWritables.clear()
+        batteriesFromIdentifier = false
         for (service: BluetoothGattService in gatt.services) {
             for (characteristic in service.characteristics) {
                 val uuid = characteristic.uuid
@@ -499,6 +697,7 @@ class BleManager private constructor(private val context: Context) {
                     uuid == MarshallGatt.RIGHT_BATTERY -> chars[uuid] = characteristic
                     uuid == MarshallGatt.CASE_BATTERY -> chars[uuid] = characteristic
                     uuid == MarshallGatt.BATTERY_LEVEL -> standardBatteryChars.add(characteristic)
+                    uuid == MarshallGatt.BATTERY_LEVEL_STATUS -> batteryStatusChars.add(characteristic)
                     MarshallGatt.INFO.contains(uuid) -> chars[uuid] = characteristic
                     else -> {
                         logLine("unknown char $uuid props=${characteristic.properties}")
@@ -517,6 +716,12 @@ class BleManager private constructor(private val context: Context) {
         lookupByUuid(gatt, MarshallGatt.TONE_CONTROL, MarshallGatt.toneControlAliases())
         lookupByUuid(gatt, MarshallGatt.AIROHA_TX, listOf(MarshallGatt.AIROHA_TX))
         lookupByUuid(gatt, MarshallGatt.AIROHA_RX, listOf(MarshallGatt.AIROHA_RX))
+        lookupByUuid(gatt, MarshallGatt.LE_AUDIO_CONFIG, MarshallGatt.leAudioConfigAliases())
+        lookupByUuid(gatt, MarshallGatt.BT_CONNECTION_CONTROL, listOf(MarshallGatt.BT_CONNECTION_CONTROL))
+        logLine(
+            "le audio 003d=${chars.containsKey(MarshallGatt.LE_AUDIO_CONFIG)} " +
+                "multipoint=${chars.containsKey(MarshallGatt.BT_CONNECTION_CONTROL)}",
+        )
         logLine(
             "eq paths: settings=${chars.containsKey(MarshallGatt.EQ_SETTINGS)} " +
                 "custom0018=${chars.containsKey(MarshallGatt.EQ_CUSTOM)} " +
@@ -600,12 +805,22 @@ class BleManager private constructor(private val context: Context) {
         for (characteristic in readable) {
             ops.send { gattRead(characteristic) }
         }
+        for (characteristic in batteryStatusChars) {
+            if (hasProperty(characteristic, BluetoothGattCharacteristic.PROPERTY_READ)) {
+                ops.send { gattRead(characteristic) }
+            }
+        }
         for (characteristic in standardBatteryChars) {
             if (hasProperty(characteristic, BluetoothGattCharacteristic.PROPERTY_READ)) {
                 ops.send { gattRead(characteristic) }
             }
         }
     }
+
+    private fun hasDedicatedBatteries(): Boolean =
+        chars.containsKey(MarshallGatt.LEFT_BATTERY) ||
+            chars.containsKey(MarshallGatt.RIGHT_BATTERY) ||
+            chars.containsKey(MarshallGatt.CASE_BATTERY)
 
     private suspend fun subscribeAll() {
         val wanted = chars.entries
@@ -739,6 +954,7 @@ class BleManager private constructor(private val context: Context) {
                     logLine("ignore stale EQ notify $parsed (holding ${state.eqPreset})")
                     return
                 }
+                logLine("eq preset $parsed from ${value.toHex()}")
                 state = state.copy(eqPreset = parsed)
             }
             MarshallGatt.EQ_CUSTOM, MarshallGatt.GRAPHICAL_EQ ->
@@ -757,16 +973,36 @@ class BleManager private constructor(private val context: Context) {
                 }
                 return
             }
+            MarshallGatt.BT_CONNECTION_CONTROL -> applyBtConnection(value)
+            MarshallGatt.LE_AUDIO_CONFIG -> {
+                val parsed = Protocol.leAudioFromValue(value)
+                logLine(
+                    "le audio present=${parsed.present} enabled=${parsed.enabled} raw=${value.toHex()}",
+                )
+                state = state.copy(
+                    leAudioConfigAvailable = true,
+                    leAudioPresent = parsed.present,
+                    leAudioEnabled = parsed.enabled,
+                    leAudioRaw = value.toHex(),
+                )
+            }
             MarshallGatt.ECO_CHARGING -> state = state.copy(batterySaverPreset = Protocol.batterySaverFromValue(value))
             MarshallGatt.TOUCH_MAP -> {
                 val (left, right) = Protocol.touchMapsFromValue(value)
                 state = state.copy(touchLeft = left, touchRight = right)
             }
 
-            MarshallGatt.LEFT_BATTERY -> state = state.copy(leftBattery = value[0].toInt())
-            MarshallGatt.RIGHT_BATTERY -> state = state.copy(rightBattery = value[0].toInt())
-            MarshallGatt.CASE_BATTERY -> state = state.copy(caseBattery = value[0].toInt())
+            MarshallGatt.LEFT_BATTERY -> if (!batteriesFromIdentifier) {
+                state = state.copy(leftBattery = batteryPercent(value))
+            }
+            MarshallGatt.RIGHT_BATTERY -> if (!batteriesFromIdentifier) {
+                state = state.copy(rightBattery = batteryPercent(value))
+            }
+            MarshallGatt.CASE_BATTERY -> if (!batteriesFromIdentifier) {
+                state = state.copy(caseBattery = batteryPercent(value))
+            }
             MarshallGatt.BATTERY_LEVEL -> applyStandardBattery(characteristic, value)
+            MarshallGatt.BATTERY_LEVEL_STATUS -> return
             MarshallGatt.MANUFACTURER -> state = state.copy(manufacturer = String(value).trim())
             MarshallGatt.MODEL_NUMBER -> state = state.copy(model = String(value).trim())
             MarshallGatt.SERIAL_NUMBER -> state = state.copy(serial = String(value).trim())
@@ -790,12 +1026,62 @@ class BleManager private constructor(private val context: Context) {
         )
     }
 
+    private fun batteryPercent(value: ByteArray): Int =
+        (value[0].toInt() and 0xff).coerceIn(0, 100)
+
+    /**
+     * Generic 0x2A19 instances have no L/R/case meaning unless Battery Level
+     * Status names them (13=left, 14=right, 6=case) — same ids Android uses
+     * on the system Device details screen. Discovery-order mapping rotated
+     * Motif's three percentages. Prefer those identifiers; otherwise keep
+     * the Tymphany L/R/case UUIDs.
+     */
     private fun applyStandardBattery(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
-        val index = standardBatteryChars.indexOf(characteristic)
-        when (index) {
-            0 -> state = state.copy(leftBattery = value[0].toInt())
-            1 -> state = state.copy(rightBattery = value[0].toInt())
-            2 -> state = state.copy(caseBattery = value[0].toInt())
+        val percent = batteryPercent(value)
+        val identified = identifierSlot(statusBytes(characteristic))
+        val slot = identified ?: if (hasDedicatedBatteries()) {
+            null
+        } else {
+            when (standardBatteryChars.indexOf(characteristic)) {
+                0 -> BatterySlot.LEFT
+                1 -> BatterySlot.CASE
+                2 -> BatterySlot.RIGHT
+                else -> null
+            }
+        }
+        if (identified != null) batteriesFromIdentifier = true
+        when (slot) {
+            BatterySlot.LEFT -> state = state.copy(leftBattery = percent)
+            BatterySlot.RIGHT -> state = state.copy(rightBattery = percent)
+            BatterySlot.CASE -> state = state.copy(caseBattery = percent)
+            null -> Unit
+        }
+    }
+
+    private enum class BatterySlot { LEFT, RIGHT, CASE }
+
+    private fun statusBytes(level: BluetoothGattCharacteristic): ByteArray? = try {
+        level.service?.getCharacteristic(MarshallGatt.BATTERY_LEVEL_STATUS)?.value
+    } catch (_: Exception) {
+        null
+    }
+
+    /** Official BatteryServiceWrapper.BatteryType ids. */
+    private fun identifierSlot(status: ByteArray?): BatterySlot? {
+        if (status == null || status.isEmpty()) return null
+        val flags = status[0].toInt() and 0xff
+        val identifier = if (flags and 0x01 != 0 && status.size >= 5) {
+            status[3].toInt() and 0xff
+        } else if (status.size >= 4) {
+            status[3].toInt() and 0xff
+        } else {
+            return null
+        }
+        return when (identifier) {
+            14 -> BatterySlot.LEFT
+            13 -> BatterySlot.RIGHT
+            6 -> BatterySlot.CASE
+            else -> null
         }
     }
 
@@ -826,6 +1112,153 @@ class BleManager private constructor(private val context: Context) {
     fun setTransparencyStrengthLevel(level: Int) =
         setTransparencyStrength(Protocol.strengthFromLevel(level))
 
+    fun refreshEq() {
+        if (!state.connected) return
+        scope.launch {
+            val characteristic = chars[MarshallGatt.EQ_SETTINGS] ?: return@launch
+            if (hasProperty(characteristic, BluetoothGattCharacteristic.PROPERTY_READ)) {
+                ops.send { gattRead(characteristic) }
+            }
+        }
+    }
+
+    fun refreshMultipoint() {
+        if (!chars.containsKey(MarshallGatt.BT_CONNECTION_CONTROL)) return
+        scope.launch { write(MarshallGatt.BT_CONNECTION_CONTROL, Protocol.btConnectionList(), required = false) }
+    }
+
+    fun removeMultipointHost(id: Int) {
+        scope.launch {
+            write(MarshallGatt.BT_CONNECTION_CONTROL, Protocol.btConnectionRemove(id), required = false)
+            delay(200)
+            refreshMultipoint()
+        }
+    }
+
+    fun disconnectMultipointHost(id: Int) {
+        scope.launch {
+            write(MarshallGatt.BT_CONNECTION_CONTROL, Protocol.btConnectionDisconnect(id), required = false)
+            delay(200)
+            refreshMultipoint()
+        }
+    }
+
+    fun ringBuds(channel: Int, start: Boolean) {
+        scope.launch {
+            if (!raceSpp.ensureConnected(adapter)) {
+                postMessage("Classic SPP not up — cannot ring")
+                return@launch
+            }
+            val packet = Protocol.findMePacket(channel, start)
+            val ok = raceSpp.send(packet)
+            logLine("find-me ch=$channel start=$start ok=$ok ${packet.toHex()}")
+            if (ok) {
+                state = state.copy(findRinging = if (start) channel else null)
+            }
+            postMessage(
+                when {
+                    !ok -> "Ring failed"
+                    !start -> "Stopped ringing"
+                    channel == 1 -> "Ringing left"
+                    channel == 2 -> "Ringing right"
+                    else -> "Ringing both"
+                },
+            )
+        }
+    }
+
+    private fun applyBtConnection(value: ByteArray) {
+        if (value.isEmpty()) return
+        logLine("multipoint ${value.toHex()}")
+        when (value[0].toInt() and 0xff) {
+            Protocol.BT_CMD_LIST -> {
+                val ids = value.drop(2).map { it.toInt() and 0xff }.filter { it != 0 }
+                multipointScratch.clear()
+                multipointPending = ids.size
+                if (ids.isEmpty()) {
+                    state = state.copy(multipointAvailable = true, multipointHosts = emptyList())
+                } else {
+                    scope.launch {
+                        write(
+                            MarshallGatt.BT_CONNECTION_CONTROL,
+                            Protocol.btConnectionQuery(ids),
+                            required = false,
+                        )
+                    }
+                }
+            }
+            Protocol.BT_CMD_QUERY -> {
+                val host = Protocol.parseBtHostQuery(value.copyOfRange(1, value.size))
+                if (host != null) {
+                    multipointScratch.removeAll { it.id == host.id }
+                    multipointScratch.add(host)
+                }
+                multipointPending = (multipointPending - 1).coerceAtLeast(0)
+                if (multipointPending == 0) {
+                    state = state.copy(
+                        multipointAvailable = true,
+                        multipointHosts = multipointScratch.toList().sortedBy { it.id },
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun maybeRestoreCustomEq() {
+        delay(400)
+        if (state.eqPreset != Protocol.EqPreset.CUSTOM.id) return
+        val last = eqLibrary.lastBands()
+        if (last.all { it == 0 } && state.customEq.all { it == 0 }) return
+        val named = eqLibrary.activeName()?.takeIf { name ->
+            eqLibrary.snapshots().any { it.name == name && it.bands == last }
+        }
+        setCustomEq(last, fromSnapshot = named)
+        logLine("restored custom eq ${last.joinToString()}")
+    }
+
+    fun eqSnapshots(): List<EqSnapshot> = eqLibrary.snapshots()
+
+    fun saveEqSnapshot(name: String) {
+        eqLibrary.saveSnapshot(name, state.customEq)
+        eqLibrary.setActive(name.trim())
+        state = state.copy(customEqSnapshot = name.trim())
+        postMessage("Saved “${name.trim()}”")
+    }
+
+    fun deleteEqSnapshot(name: String) {
+        eqLibrary.deleteSnapshot(name)
+        if (state.customEqSnapshot == name) {
+            state = state.copy(customEqSnapshot = null)
+        }
+    }
+
+    fun applyEqSnapshot(name: String) {
+        val snap = eqLibrary.snapshots().firstOrNull { it.name == name } ?: return
+        setCustomEq(snap.bands, fromSnapshot = snap.name)
+    }
+
+    fun setLeAudioEnabled(enabled: Boolean) {
+        state = state.copy(leAudioEnabled = enabled)
+        scope.launch {
+            val packet = Protocol.encodeLeAudioEnabled(enabled)
+            val ok = write(MarshallGatt.LE_AUDIO_CONFIG, packet)
+            logLine("le audio write enabled=$enabled ok=$ok")
+            postMessage(
+                if (ok) {
+                    if (enabled) "LE Audio flag written. Forget and re-pair to test LC3."
+                    else "LE Audio flag cleared."
+                } else {
+                    "LE Audio config not available on this firmware."
+                },
+            )
+            chars[MarshallGatt.LE_AUDIO_CONFIG]?.let { characteristic ->
+                if (hasProperty(characteristic, BluetoothGattCharacteristic.PROPERTY_READ)) {
+                    ops.send { gattRead(characteristic) }
+                }
+            }
+        }
+    }
+
     fun setEqPreset(presetId: Int) {
         holdEqPreset(presetId)
         scope.launch {
@@ -849,10 +1282,13 @@ class BleManager private constructor(private val context: Context) {
         setCustomEq(next)
     }
 
-    fun setCustomEq(bands: List<Int>) {
+    fun setCustomEq(bands: List<Int>, fromSnapshot: String? = null) {
         val next = (0 until 5).map { bands.getOrElse(it) { 0 }.coerceIn(-6, 6) }
         holdEqPreset(Protocol.EqPreset.CUSTOM.id)
-        state = state.copy(customEq = next)
+        val active = fromSnapshot
+            ?: eqLibrary.snapshots().firstOrNull { it.bands == next }?.name
+        eqLibrary.setActive(active)
+        state = state.copy(customEq = next, customEqSnapshot = active)
         customEqJob?.cancel()
         customEqJob = scope.launch {
             delay(220)
@@ -895,6 +1331,7 @@ class BleManager private constructor(private val context: Context) {
             return
         }
         val ok = raceSpp.send(packet)
+        if (ok) eqLibrary.saveLast(bands)
         logLine("custom eq bands=${bands.joinToString()} spp=$ok bytes=${packet.size}")
     }
 

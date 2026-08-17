@@ -81,12 +81,20 @@ class MarshallWidgetProvider : AppWidgetProvider() {
                 WidgetStateStore.update(context)
             }
             ACTION_TOGGLE_ANC -> toggleAnc(context)
+            ACTION_OPEN_APP -> openApp(context)
+            ACTION_WIDGET -> when (intent.getStringExtra(EXTRA_WIDGET_ACTION)) {
+                ACTION_TOGGLE_ANC -> toggleAnc(context)
+                ACTION_OPEN_APP -> openApp(context)
+            }
         }
     }
 
     companion object {
         const val ACTION_TOGGLE_ANC = "com.marshall.motif.action.TOGGLE_ANC"
         const val ACTION_FLIP_PAGE = "com.marshall.motif.action.FLIP_PAGE"
+        const val ACTION_OPEN_APP = "com.marshall.motif.action.OPEN_APP"
+        const val ACTION_WIDGET = "com.marshall.motif.action.WIDGET"
+        const val EXTRA_WIDGET_ACTION = "widget_action"
 
         fun views(context: Context, appWidgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID): RemoteViews {
             return try {
@@ -99,7 +107,7 @@ class MarshallWidgetProvider : AppWidgetProvider() {
                 views.setRemoteAdapter(R.id.widget_list, service)
                 views.setPendingIntentTemplate(
                     R.id.widget_list,
-                    pending(context, ACTION_TOGGLE_ANC, appWidgetId, 2, mutable = true),
+                    pending(context, ACTION_WIDGET, appWidgetId, 2, mutable = true),
                 )
                 views
             } catch (_: Exception) {
@@ -130,6 +138,7 @@ class MarshallWidgetProvider : AppWidgetProvider() {
                         prefs.getInt("right", -1),
                         prefs.getInt("case", -1),
                         context.resources.displayMetrics.density,
+                        ContextCompat.getColor(context, R.color.widget_on_surface),
                     ),
                 )
                 views.setTextViewText(R.id.widget_anc_label, ancLabel(anc))
@@ -140,11 +149,16 @@ class MarshallWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_anc_label, "Not connected")
                 views.setImageViewResource(R.id.widget_anc_icon, R.drawable.ic_noise_control_off)
             }
-            views.setInt(R.id.widget_anc_icon, "setColorFilter", 0xFFF4F4F4.toInt())
+            views.setInt(
+                R.id.widget_anc_icon,
+                "setColorFilter",
+                ContextCompat.getColor(context, R.color.widget_on_surface),
+            )
 
+            val open = pendingActivity(context, appWidgetId)
             val flip = pending(context, ACTION_FLIP_PAGE, appWidgetId, 1)
             val toggle = pending(context, ACTION_TOGGLE_ANC, appWidgetId, 2)
-            views.setOnClickPendingIntent(R.id.widget_page_battery, flip)
+            views.setOnClickPendingIntent(R.id.widget_page_battery, open)
             views.setOnClickPendingIntent(R.id.widget_anc_label, flip)
             views.setOnClickPendingIntent(R.id.widget_anc_icon, toggle)
             views.setOnClickPendingIntent(R.id.widget_anc_hit, toggle)
@@ -155,6 +169,26 @@ class MarshallWidgetProvider : AppWidgetProvider() {
             Protocol.ANC_ON -> "Noise cancellation"
             Protocol.ANC_TRANSPARENCY -> "Transparency"
             else -> "Off"
+        }
+
+        private fun openApp(context: Context) {
+            context.startActivity(launchIntent(context))
+        }
+
+        private fun launchIntent(context: Context): Intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+
+        private fun pendingActivity(context: Context, appWidgetId: Int): PendingIntent {
+            return PendingIntent.getActivity(
+                context,
+                appWidgetId * 10 + 3,
+                launchIntent(context),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         }
 
         private fun pending(

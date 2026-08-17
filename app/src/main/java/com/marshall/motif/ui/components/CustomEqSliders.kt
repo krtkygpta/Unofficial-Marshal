@@ -71,6 +71,9 @@ fun CustomEqSliders(
                     colors = SliderDefaults.colors(
                         thumbColor = MaterialTheme.colorScheme.primary,
                         activeTrackColor = MaterialTheme.colorScheme.primary,
+                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        activeTickColor = MaterialTheme.colorScheme.onPrimary,
+                        inactiveTickColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
                     ),
                 )
                 Text(

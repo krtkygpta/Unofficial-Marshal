@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.TouchApp
@@ -55,6 +56,7 @@ import com.marshall.motif.ui.theme.Radius
 import com.marshall.motif.ui.theme.Space
 import com.marshall.motif.ui.theme.CustomThemeMode
 import com.marshall.motif.ui.theme.ThemeMode
+import com.marshall.motif.ui.theme.marshallSegmentedButtonColors
 
 private data class AccentOption(val label: String, val color: Color)
 
@@ -138,6 +140,50 @@ fun SettingsScreen(
             }
         }
 
+        if (state.connected && state.multipointAvailable) {
+            SectionBlock("Multipoint") {
+                MarshallCard {
+                    if (state.multipointHosts.isEmpty()) {
+                        HintText("No linked phones reported. Pull the list again after both devices have connected once.")
+                    } else {
+                        state.multipointHosts.forEach { host ->
+                            InfoRow(
+                                host.name.ifBlank { host.mac },
+                                buildString {
+                                    append(if (host.connected) "Connected" else "Saved")
+                                    append("  ·  ")
+                                    append(host.mac)
+                                },
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(Space.Sm),
+                            ) {
+                                if (host.connected) {
+                                    OutlinedButton(
+                                        onClick = { ble.disconnectMultipointHost(host.id) },
+                                        modifier = Modifier.weight(1f),
+                                        shape = Radius.Shape,
+                                    ) { Text("Disconnect") }
+                                }
+                                OutlinedButton(
+                                    onClick = { ble.removeMultipointHost(host.id) },
+                                    modifier = Modifier.weight(1f),
+                                    shape = Radius.Shape,
+                                ) { Text("Forget") }
+                            }
+                            Spacer(Modifier.height(Space.Sm))
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = ble::refreshMultipoint,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = Radius.Shape,
+                    ) { Text("Refresh list") }
+                }
+            }
+        }
+
         SectionBlock("Sound behaviour") {
             ToggleRow(
                 title = "In-ear detection",
@@ -165,6 +211,31 @@ fun SettingsScreen(
             )
             if (state.connected && !state.has(MarshallGatt.UI_SOUNDS)) {
                 HintText("UI-sounds characteristic not advertised; write is still attempted.")
+            }
+        }
+
+        if (state.connected) {
+            SectionBlock("LE Audio / LC3 (experiment)") {
+                ToggleRow(
+                    title = "Enable LE Audio flag",
+                    subtitle = if (state.leAudioConfigAvailable) {
+                        buildString {
+                            append(if (state.leAudioPresent) "Firmware reports LE Audio present" else "Present bit off")
+                            append(" · ")
+                            append(if (state.leAudioEnabled) "enabled" else "disabled")
+                            if (state.leAudioRaw.isNotEmpty()) append(" · ${state.leAudioRaw}")
+                        }
+                    } else {
+                        "Characteristic 003d not advertised — Motif firmware may have no toggle"
+                    },
+                    checked = state.leAudioEnabled,
+                    onCheckedChange = ble::setLeAudioEnabled,
+                    icon = Icons.Rounded.Bluetooth,
+                    enabled = state.connected && state.leAudioConfigAvailable,
+                )
+                HintText(
+                    "This writes Marshall's official LE_AUDIO_CONFIG bit. It cannot invent LC3 if the firmware never shipped the LE Audio stack. After enabling: disconnect, forget the buds in Android Bluetooth, pair again, then check Developer options → Bluetooth Audio HAL / codec, or play music and look for LC3 / LE Audio on the device details screen.",
+                )
             }
         }
 
@@ -220,16 +291,19 @@ fun SettingsScreen(
                         selected = settings.themeMode == ThemeMode.DYNAMIC,
                         onClick = { settings.setTheme(ThemeMode.DYNAMIC) },
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                        colors = marshallSegmentedButtonColors(),
                     ) { Text("Dynamic") }
                     SegmentedButton(
                         selected = settings.themeMode == ThemeMode.MONOCHROMATIC,
                         onClick = { settings.setTheme(ThemeMode.MONOCHROMATIC) },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                        colors = marshallSegmentedButtonColors(),
                     ) { Text("Mono") }
                     SegmentedButton(
                         selected = settings.themeMode == ThemeMode.CUSTOM,
                         onClick = { settings.setTheme(ThemeMode.CUSTOM) },
                         shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                        colors = marshallSegmentedButtonColors(),
                     ) { Text("Custom") }
                 }
                 Spacer(Modifier.height(Space.Sm))
@@ -258,6 +332,7 @@ fun SettingsScreen(
                                     index = index,
                                     count = CustomThemeMode.entries.size,
                                 ),
+                                colors = marshallSegmentedButtonColors(),
                             ) { Text(mode.label()) }
                         }
                     }

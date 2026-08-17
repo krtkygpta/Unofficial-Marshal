@@ -1,148 +1,151 @@
 package com.marshall.motif.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import kotlin.math.abs
+import androidx.compose.ui.unit.sp
+
+private val BAND_LABELS = listOf("160", "400", "1k", "2.5k", "6k")
 
 /**
- * Static 5-band equaliser illustration for a sound profile.
- * `shape` values are in -1..1 (cut / boost) and map to bar heights.
- * No animation — the graphic is the profile itself.
+ * Frequency-response style plot. [shape] is −1..1 per Motif band.
  */
 @Composable
 fun EqVisual(
     shape: FloatArray,
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary,
-    track: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    @Suppress("UNUSED_PARAMETER") track: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     @Suppress("UNUSED_PARAMETER") animate: Boolean = false,
+    showLabels: Boolean = true,
+    highlightIndex: Int = -1,
 ) {
-    val grid = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
-    val zeroLine = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+    val zero = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.18f)
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    val measurer = rememberTextMeasurer()
+    val labelStyle = TextStyle(
+        color = labelColor,
+        fontSize = 10.sp,
+    )
 
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val padH = 20.dp.toPx()
-        val padV = 16.dp.toPx()
-        val chartL = padH
-        val chartR = w - padH
-        val chartT = padV
-        val chartB = h - padV
-        val chartW = chartR - chartL
-        val chartH = chartB - chartT
-        val midY = chartT + chartH / 2f
-        val bands = 5
-        val bandW = chartW / bands
+    Box(modifier) {
+        Canvas(Modifier.fillMaxSize().padding(bottom = if (showLabels) 18.dp else 0.dp)) {
+            val padH = 18.dp.toPx()
+            val padV = 14.dp.toPx()
+            val left = padH
+            val right = size.width - padH
+            val top = padV
+            val bottom = size.height - padV
+            val midY = (top + bottom) / 2f
+            val amp = (bottom - top) * 0.42f
+            val n = 5
+            val pts = List(n) { i ->
+                val x = left + (right - left) * (i / (n - 1f))
+                val v = shape.getOrElse(i) { 0f }.coerceIn(-1f, 1f)
+                Offset(x, midY - v * amp)
+            }
 
-        // Center (flat) reference line
-        drawLine(
-            color = zeroLine,
-            start = Offset(chartL, midY),
-            end = Offset(chartR, midY),
-            strokeWidth = 1.dp.toPx(),
-            cap = StrokeCap.Round,
-        )
+            drawLine(zero, Offset(left, midY), Offset(right, midY), 1.2.dp.toPx(), StrokeCap.Round)
 
-        // Soft horizontal guides
-        for (g in 1..2) {
-            val yUp = midY - chartH * 0.22f * g
-            val yDn = midY + chartH * 0.22f * g
-            drawLine(grid, Offset(chartL, yUp), Offset(chartR, yUp), 1.dp.toPx())
-            drawLine(grid, Offset(chartL, yDn), Offset(chartR, yDn), 1.dp.toPx())
-        }
-
-        // Smooth curve through band peaks
-        val curve = Path()
-        val samples = 48
-        for (i in 0..samples) {
-            val t = i / samples.toFloat()
-            val x = chartL + t * chartW
-            // Interpolate between band centers
-            val pos = t * (bands - 1)
-            val i0 = pos.toInt().coerceIn(0, bands - 1)
-            val i1 = (i0 + 1).coerceAtMost(bands - 1)
-            val f = pos - i0
-            val v0 = shape.getOrElse(i0) { 0f }
-            val v1 = shape.getOrElse(i1) { 0f }
-            val v = v0 + (v1 - v0) * f
-            val y = midY - v * chartH * 0.38f
-            if (i == 0) curve.moveTo(x, y) else curve.lineTo(x, y)
-        }
-        drawPath(
-            curve,
-            color = accent.copy(alpha = 0.35f),
-            style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round),
-        )
-
-        // Bars for each band (static profile)
-        for (i in 0 until bands) {
-            val v = shape.getOrElse(i) { 0f }.coerceIn(-1f, 1f)
-            val mag = abs(v)
-            val barH = (0.08f + mag * 0.72f) * chartH * 0.5f
-            val cx = chartL + bandW * i + bandW * 0.5f
-            val barWidth = bandW * 0.42f
-            val top = if (v >= 0f) midY - barH else midY
-            val height = barH.coerceAtLeast(4.dp.toPx())
-            drawRoundRect(
+            val stroke = smoothPath(pts)
+            val fill = Path().apply {
+                addPath(stroke)
+                lineTo(pts.last().x, midY)
+                lineTo(pts.first().x, midY)
+                close()
+            }
+            drawPath(
+                fill,
                 brush = Brush.verticalGradient(
-                    colors = if (v >= 0f) {
-                        listOf(accent.copy(alpha = 0.95f), accent.copy(alpha = 0.45f))
-                    } else {
-                        listOf(accent.copy(alpha = 0.45f), accent.copy(alpha = 0.85f))
-                    },
+                    0f to accent.copy(alpha = 0.32f),
+                    1f to accent.copy(alpha = 0.02f),
+                    startY = top,
+                    endY = bottom,
                 ),
-                topLeft = Offset(cx - barWidth / 2f, top),
-                size = Size(barWidth, height),
-                cornerRadius = CornerRadius(barWidth / 2f),
+                style = Fill,
             )
-            // Band baseline tick
-            drawCircle(
-                color = accent.copy(alpha = 0.5f),
-                radius = 2.dp.toPx(),
-                center = Offset(cx, midY),
+            drawPath(
+                stroke,
+                color = accent,
+                style = Stroke(3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
             )
+            pts.forEachIndexed { i, p ->
+                val hot = i == highlightIndex
+                drawCircle(accent.copy(alpha = if (hot) 0.30f else 0.22f), (if (hot) 11.dp else 7.dp).toPx(), p)
+                drawCircle(accent, (if (hot) 5.dp else 3.4.dp).toPx(), p)
+            }
+        }
+        if (showLabels) {
+            Canvas(Modifier.fillMaxSize()) {
+                val padH = 18.dp.toPx()
+                val n = 5
+                for (i in 0 until n) {
+                    val x = padH + (size.width - 2 * padH) * (i / (n - 1f))
+                    val layout = measurer.measure(BAND_LABELS[i], labelStyle)
+                    drawText(
+                        layout,
+                        topLeft = Offset(x - layout.size.width / 2f, size.height - layout.size.height),
+                    )
+                }
+            }
         }
     }
 }
 
-/**
- * Small equalizer bars (optional mini widget).
- */
 @Composable
-fun MiniEqualizer(
+fun EqSparkline(
+    shape: FloatArray,
+    accent: Color,
     modifier: Modifier = Modifier,
-    color: Color,
-    active: Boolean,
 ) {
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val barCount = 4
-        val gap = w / (barCount * 2)
-        val barWidth = gap
-        val heights = floatArrayOf(0.35f, 0.7f, 0.5f, 0.85f)
-
-        for (i in 0 until barCount) {
-            val x = i * gap * 2
-            val height = if (active) heights[i] * h else h * 0.35f
-            drawRoundRect(
-                color = color.copy(alpha = if (active) 1f else 0.3f),
-                topLeft = Offset(x, (h - height) / 2f),
-                size = Size(barWidth, height),
-                cornerRadius = CornerRadius(barWidth / 2f),
-            )
+    val zero = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.16f)
+    Canvas(modifier) {
+        val left = 2.dp.toPx()
+        val right = size.width - 2.dp.toPx()
+        val midY = size.height / 2f
+        val amp = size.height * 0.38f
+        val n = 5
+        val pts = List(n) { i ->
+            val x = left + (right - left) * (i / (n - 1f))
+            val v = shape.getOrElse(i) { 0f }.coerceIn(-1f, 1f)
+            Offset(x, midY - v * amp)
         }
+        drawLine(zero, Offset(left, midY), Offset(right, midY), 1.dp.toPx())
+        drawPath(
+            smoothPath(pts),
+            color = accent,
+            style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+        )
     }
+}
+
+private fun DrawScope.smoothPath(pts: List<Offset>): Path {
+    val path = Path()
+    if (pts.isEmpty()) return path
+    path.moveTo(pts.first().x, pts.first().y)
+    if (pts.size == 1) return path
+    for (i in 0 until pts.lastIndex) {
+        val p0 = pts[i]
+        val p1 = pts[i + 1]
+        val dx = (p1.x - p0.x) * 0.45f
+        path.cubicTo(p0.x + dx, p0.y, p1.x - dx, p1.y, p1.x, p1.y)
+    }
+    return path
 }

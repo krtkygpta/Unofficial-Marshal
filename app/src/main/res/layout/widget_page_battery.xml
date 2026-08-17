@@ -60,7 +60,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Not connected"
-            android:textColor="#F4F4F4"
+            android:textColor="@color/widget_on_surface"
             android:textSize="13sp" />
     </LinearLayout>
 </LinearLayout>

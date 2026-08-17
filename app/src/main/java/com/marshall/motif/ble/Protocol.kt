@@ -86,6 +86,7 @@ object Protocol {
 
         companion object {
             fun fromId(id: Int): EqPreset = entries.firstOrNull { it.id == id } ?: MARSHALL
+            fun fromIdOrNull(id: Int): EqPreset? = entries.firstOrNull { it.id == id }
         }
     }
 
@@ -108,23 +109,32 @@ object Protocol {
     }
 
     /**
-     * Parse a full EQ_SETTINGS status notify. Write echoes are ignored:
-     *   [0x00, step]           CHANGE_ACTIVE_STEP — step is not a preset id
+     * Parse EQ_SETTINGS (0017) the way the official wrapper does.
+     *
+     * Writes / echoes:
+     *   [0x00, step]           CHANGE_ACTIVE_STEP — not a preset
      *   [0x01, step, presetId] ASSIGN_STEP_PRESET
-     * Status dump (6+ bytes): byte[2] is the active step, presets follow
-     * at bytes [3], [4], [5] for slots 0/1/2.
+     *
+     * Status (scheme 2, Motif II):
+     *   FF  <stepCount>  <activeStep>  <scheme>  <flags>  p0 p1 p2
+     * Presets start at byte 5. Byte 3 is the scheme id (1 = Motif),
+     * not a preset — treating it as one always looked like Custom.
      */
     fun eqPresetFromValue(value: ByteArray): Int? {
         if (value.isEmpty()) return null
         val b0 = value[0].toInt() and 0xff
         if (value.size == 2 && b0 == 0x00) return null
         if (value.size == 3 && b0 == 0x01) return value[2].toInt() and 0xff
-        if (value.size >= 6) {
-            val step = (value[2].toInt() and 0xff)
-            if (step in 0..2 && value.size >= 4 + step) {
-                return value[3 + step].toInt() and 0xff
+        if (b0 == 0xFF && value.size >= 6) {
+            val stepCount = value[1].toInt() and 0xff
+            val active = value[2].toInt() and 0xff
+            val presetBase = 5
+            if (stepCount in 1..3 &&
+                active in 0 until stepCount &&
+                value.size >= presetBase + stepCount
+            ) {
+                return value[presetBase + active].toInt() and 0xff
             }
-            return value[5].toInt() and 0xff
         }
         return null
     }
@@ -222,10 +232,111 @@ object Protocol {
         ) + payload
     }
 
+    /** Official Airoha RACE_FIND_ME (d1.d.f76442k). */
+    const val RACE_FIND_ME = 0x2C01
+
+    /**
+     * setFindMyBuds(channel, behavior) → 3-byte payload after official mapping.
+     * channel: 1=left, 2=right, 0=both. behavior: 1=start, 2=stop.
+     */
+    fun findMePacket(channel: Int, start: Boolean): ByteArray {
+        val mappedCh = when (channel) {
+            1 -> 0
+            2 -> 1
+            else -> 2
+        }
+        val behavior = if (start) 1 else 2
+        val (a, b) = when (behavior) {
+            1 -> 0 to 1
+            2 -> 1 to 0
+            else -> 0 to 0
+        }
+        return raceRequest(RACE_FIND_ME, byteArrayOf(a.toByte(), b.toByte(), mappedCh.toByte()))
+    }
+
+    const val BT_CMD_LIST = 0x01
+    const val BT_CMD_QUERY = 0x02
+    const val BT_CMD_REMOVE = 0x03
+    const val BT_CMD_DISCONNECT = 0x04
+
+    fun btConnectionList(): ByteArray = byteArrayOf(BT_CMD_LIST.toByte())
+
+    fun btConnectionQuery(ids: List<Int>): ByteArray {
+        val buf = ByteArray(4 + ids.size)
+        buf[0] = BT_CMD_QUERY.toByte()
+        buf[1] = ids.size.toByte()
+        buf[2] = 0x00
+        buf[3] = 0x07
+        ids.forEachIndexed { i, id -> buf[4 + i] = id.toByte() }
+        return buf
+    }
+
+    fun btConnectionRemove(id: Int) = byteArrayOf(BT_CMD_REMOVE.toByte(), id.toByte())
+    fun btConnectionDisconnect(id: Int) = byteArrayOf(BT_CMD_DISCONNECT.toByte(), id.toByte())
+
+    fun parseBtHostQuery(payload: ByteArray): BtHost? {
+        if (payload.size < 13) return null
+        val id = payload[1].toInt() and 0xff
+        val mac = payload.copyOfRange(4, 10).joinToString(":") { "%02X".format(it) }
+        if (mac == "00:00:00:00:00:00") return null
+        val nameEnd = (payload.size - 2).coerceAtLeast(10)
+        val name = if (nameEnd > 10) {
+            String(payload, 10, nameEnd - 10, Charsets.UTF_8).trim { it <= ' ' || it == '\u0000' }
+        } else {
+            ""
+        }
+        return BtHost(id, mac, name.ifBlank { mac }, payload.last().toInt() == 1)
+    }
+
     /** DSP realtime PEQ — Motif II CUSTOM_AIROHA_EQ. See [AirohaPeq]. */
     const val RACE_DSPREALTIME_PEQ = AirohaPeq.RACE_PEQ
 
     fun airohaPeqPackets(bands: List<Int>): List<ByteArray> = airohaGraphicSetPackets(bands)
+
+    /**
+     * LE_AUDIO_CONFIG (`003d`). Official wrapper:
+     *   read  [?, presentFlags, enabledFlags]  (3 bytes) or [present, enabled]
+     *   write [presentFlags, enabledFlags]
+     * Bit 0 = LE_AUDIO_SUPPORT.
+     */
+    const val LE_AUDIO_SUPPORT_BIT = 0x01
+
+    data class LeAudioConfig(
+        val present: Boolean,
+        val enabled: Boolean,
+        val raw: ByteArray,
+    )
+
+    fun leAudioFromValue(value: ByteArray): LeAudioConfig {
+        val presentFlags: Int
+        val enabledFlags: Int
+        when {
+            value.size >= 3 -> {
+                presentFlags = value[1].toInt() and 0xff
+                enabledFlags = value[2].toInt() and 0xff
+            }
+            value.size == 2 -> {
+                presentFlags = value[0].toInt() and 0xff
+                enabledFlags = value[1].toInt() and 0xff
+            }
+            else -> {
+                presentFlags = LE_AUDIO_SUPPORT_BIT
+                enabledFlags = value[0].toInt() and 0xff
+            }
+        }
+        return LeAudioConfig(
+            present = presentFlags and LE_AUDIO_SUPPORT_BIT != 0,
+            enabled = enabledFlags and LE_AUDIO_SUPPORT_BIT != 0,
+            raw = value.copyOf(),
+        )
+    }
+
+    /** Official 2-byte write: present=LE_AUDIO_SUPPORT, enabled=on/off. */
+    fun encodeLeAudioEnabled(enabled: Boolean): ByteArray =
+        byteArrayOf(
+            LE_AUDIO_SUPPORT_BIT.toByte(),
+            (if (enabled) LE_AUDIO_SUPPORT_BIT else 0).toByte(),
+        )
 
     // ---- Battery saver / eco charging -------------------------------
 

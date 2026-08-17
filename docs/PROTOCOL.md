@@ -25,8 +25,12 @@ Two writes, **step 1** (profile 2):
 Motif earbud IDs used here: 0 Marshall, 1 Custom, 2 Bass boost, 3 Mid boost,
 4 Treble boost, 5 Mid reduction.
 
-Status notify `FF 02 <step> <p0> <p1> <p2> …` — byte 2 is the active step,
-bytes 3–5 are the three slot presets. Ignore 2-byte `[0x00, step]` echoes.
+Status notify (official scheme 2):
+
+`FF <stepCount> <activeStep> <scheme> <flags> <p0> <p1> <p2>`
+
+Presets start at **byte 5**. Byte 3 is the scheme id (1 = Motif), not a
+preset. Ignore 2-byte `[0x00, step]` echoes.
 
 ## Custom EQ (Motif II / `CustomEQType.PLANT`)
 

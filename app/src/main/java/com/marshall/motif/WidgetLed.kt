@@ -6,7 +6,8 @@ import android.graphics.Paint
 
 /**
  * Nothing-style 5×7 LED percentages for the home-screen widget.
- * Renders Left · Right · Case as three equally spaced values.
+ * Renders Left · Case · Right — same order as the in-app battery row,
+ * so the side digits sit under the matching bud.
  */
 object WidgetLed {
     private const val COLS = 5
@@ -27,8 +28,14 @@ object WidgetLed {
         '-' to intArrayOf(0b00000, 0b00000, 0b00000, 0b01110, 0b00000, 0b00000, 0b00000),
     )
 
-    fun drawPercents(left: Int, right: Int, case: Int, density: Float): Bitmap {
-        val values = listOf(format(left), format(right), format(case))
+    fun drawPercents(
+        left: Int,
+        right: Int,
+        case: Int,
+        density: Float,
+        onSurface: Int = 0xFFF2F2F2.toInt(),
+    ): Bitmap {
+        val values = listOf(format(left), format(case), format(right))
         val cell = (2.15f * density).coerceAtLeast(2f)
         val gap = cell * 0.55f
         val charAdvance = COLS * cell + gap
@@ -41,7 +48,7 @@ object WidgetLed {
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = 0xFFF2F2F2.toInt()
+            color = onSurface
             style = Paint.Style.FILL
         }
         val radius = cell * 0.36f

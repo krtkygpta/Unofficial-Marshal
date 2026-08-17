@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Bluetooth
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.AlertDialog
@@ -53,6 +55,7 @@ fun HomeScreen(
     onOpenSound: () -> Unit,
     onOpenControls: () -> Unit,
     onOpenWear: () -> Unit,
+    onOpenFind: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -157,6 +160,7 @@ fun HomeScreen(
                     }
                 }
             }
+
         }
 
         SectionBlock("Active noise control") {
@@ -215,10 +219,24 @@ fun HomeScreen(
                 )
                 ListDivider()
                 SettingsRow(
+                    title = "Find buds",
+                    subtitle = "Ring left or right",
+                    icon = Icons.Rounded.NotificationsActive,
+                    onClick = onOpenFind,
+                )
+                ListDivider()
+                SettingsRow(
                     title = "Device settings",
                     subtitle = "Battery, name and diagnostics",
                     icon = Icons.Rounded.Settings,
                     onClick = onOpenSettings,
+                )
+                ListDivider()
+                SettingsRow(
+                    title = "Switch device",
+                    subtitle = "Other paired Marshall products",
+                    icon = Icons.Rounded.Bluetooth,
+                    onClick = onBack,
                 )
             }
         }

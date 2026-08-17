@@ -70,9 +70,10 @@ data class DeviceState(
     val touchEnabled: Boolean = true,
     val wearDetectEnabled: Boolean = true,
 
-    val eqPreset: Int = 0,                   // preset id, see EqPreset
+    val eqPreset: Int = -1,                  // preset id from 0017; -1 = unread
     /** Five custom EQ bands in dB, from -12 to +12. */
     val customEq: List<Int> = listOf(0, 0, 0, 0, 0),
+    val customEqSnapshot: String? = null,
     val batterySaverPreset: String = "none", // none / standard / medium / max
 
     val touchLeft: TouchMap = TouchMap(),
@@ -83,6 +84,17 @@ data class DeviceState(
     val serial: String = "",
     val firmware: String = "",
     val hardware: String = "",
+    /** GATT `003d` exists on this connection. */
+    val leAudioConfigAvailable: Boolean = false,
+    /** Firmware says the LE Audio feature is present. */
+    val leAudioPresent: Boolean = false,
+    /** Firmware enable bit (not the same as Android actually using LC3). */
+    val leAudioEnabled: Boolean = false,
+    val leAudioRaw: String = "",
+    val multipointAvailable: Boolean = false,
+    val multipointHosts: List<BtHost> = emptyList(),
+    /** 1 = left ringing, 2 = right, 0 = both, null = idle. */
+    val findRinging: Int? = null,
     /** Characteristics that were actually found on the connected device. */
     val availableChars: Set<UUID> = emptySet(),
     /** Full GATT map (service / characteristic / properties) for diagnostics. */
@@ -90,6 +102,20 @@ data class DeviceState(
 ) {
     fun has(uuid: UUID): Boolean = availableChars.contains(uuid)
 }
+
+data class BtHost(
+    val id: Int,
+    val mac: String,
+    val name: String,
+    val connected: Boolean,
+)
+
+/** A Marshall product this phone has used or bonded, for the My Marshall switcher. */
+data class KnownDevice(
+    val address: String,
+    val name: String,
+    val lastConnectedAt: Long = 0L,
+)
 
 /** Touch gesture actions understood by the earbuds. */
 enum class TouchAction(val byte: Int, val label: String, val subtitle: String) {

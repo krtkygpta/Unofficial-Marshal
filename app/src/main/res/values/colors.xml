@@ -5,5 +5,10 @@
     <color name="marshall_black">#0B0B0D</color>
     <color name="marshall_gold">#D4AF5A</color>
     <color name="pixel_bg">#F1F3F4</color>
+
+    <!-- Widget: light home-screen plate -->
+    <color name="widget_surface">#F4F4F2</color>
+    <color name="widget_well">#E2E4E2</color>
+    <color name="widget_on_surface">#1A1C1A</color>
 </resources>
 
