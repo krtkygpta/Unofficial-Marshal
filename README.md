@@ -10,7 +10,7 @@ off as Marshall Bluetooth.
 The stock app is slow. This is a small Compose stand-in: BLE connect, ANC /
 EQ / touch, and (on Motif II) the same custom-EQ path the official app uses.
 
-Current release: **1.1.8**.
+Current release: **1.1.9**.
 
 **Tested:** Marshall Motif II A.N.C.  
 **Likely works:** other Zound / Marshall devices on the same BLE profile
